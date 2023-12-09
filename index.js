@@ -26,12 +26,12 @@ const error = options.verbose ? console.error : () => {};
 const execP = promisify(exec);
 /**
  * Run a command and output stdout and in
- * @param {string} cmd 
+ * @param {string} cmd
  * @returns {Promise<string>}
  * @throws {string}
  */
 async function cli(cmd) {
-    const {stdout, stderr} = await execP(cmd);
+    const { stdout, stderr } = await execP(cmd);
     if (stderr) {
         throw new Error(stderr);
     }
@@ -46,8 +46,8 @@ async function cli(cmd) {
  * @returns {boolean}
  */
 function withinMargin(value, target, margin) {
-    const plusminus = Math.round(target * margin / 100);
-    return value < (target + plusminus) && value > (target - plusminus);
+    const plusminus = Math.round((target * margin) / 100);
+    return value < target + plusminus && value > target - plusminus;
 }
 
 /**
@@ -57,13 +57,13 @@ function withinMargin(value, target, margin) {
  */
 
 /**
- * 
+ *
  * @param {string|import("node:fs").PathLike} imgPath
  * @returns {Promise<Dimensions>}
  */
 async function getImageDimensions(imgPath) {
     const identifyResult = await cli(
-        `gm identify -verbose ${imgPath} | grep Geometry`
+        `gm identify -verbose ${imgPath} | grep Geometry`,
     );
     const identifyJson = parseYaml(identifyResult);
     const [width, height] = identifyJson.Geometry.split("x");
@@ -91,9 +91,11 @@ async function convertToIsometric(inputPath, outputPath) {
 
     // True Isometric is a 30deg angle <> square
     const shearAngle = 30;
-    const targetWidth = Math.round(width*2/3);
+    const targetWidth = Math.round((width * 2) / 3);
     // y_shear is measured relative to the X axis
-    const yShear = Math.round(Math.tan(shearAngle * Math.PI / 180)*targetWidth);
+    const yShear = Math.round(
+        Math.tan((shearAngle * Math.PI) / 180) * targetWidth,
+    );
     // So the amount we want to yShear will need to translate to a specific angle relative to Y
     const targetHeight = height + yShear;
 
@@ -104,23 +106,29 @@ Target Height: ${targetHeight}
 `);
 
     await fs.copyFile(inputPath, outputPath);
-    await cli(
-        `gm mogrify -geometry ${targetWidth}x${height}! ${outputPath}`
-    );
+    await cli(`gm mogrify -geometry ${targetWidth}x${height}! ${outputPath}`);
     await cli(
         // Trial and Error showed that 35deg is actually what produces a 30deg right triangle below asset.
-        `gm mogrify -shear 0x${shearAngle+5} -background "transparent" ${outputPath}`
+        `gm mogrify -shear 0x${
+            shearAngle + 5
+        } -background "transparent" ${outputPath}`,
     );
 
-    const {width:final_width,height:final_height} = await getImageDimensions(outputPath);
+    const { width: final_width, height: final_height } =
+        await getImageDimensions(outputPath);
     log(`Final Identify Result -
 Dimensions: ${final_width}x${final_height}
 `);
 
-    if (withinMargin(final_width, targetWidth, 0.5) && withinMargin(final_height, targetHeight, 0.5)) {
+    if (
+        withinMargin(final_width, targetWidth, 0.5) &&
+        withinMargin(final_height, targetHeight, 0.5)
+    ) {
         console.log(`${chalk.bold.greenBright("Success!")} - ${outputPath}`);
     } else {
-        console.warn(`${chalk.bold.yellowBright("Outside Margin!")} - ${outputPath}`);
+        console.warn(
+            `${chalk.bold.yellowBright("Outside Margin!")} - ${outputPath}`,
+        );
         warn("Final dimensions are not within 0.5% of target dimensions.");
     }
 }
@@ -140,9 +148,11 @@ async function main() {
         const outputStat = await fs.stat(output).catch((error) => {
             if (error?.code === "ENOENT") return undefined;
             throw error;
-        })
+        });
         if (outputStat?.isFile()) {
-            throw new Error("Invalid Output: Cannot write to file as directory.")
+            throw new Error(
+                "Invalid Output: Cannot write to file as directory.",
+            );
         }
         if (!outputStat?.isDirectory()) {
             await fs.mkdir(output, { recursive: true });
@@ -153,11 +163,18 @@ async function main() {
          */
         const conversionPs = [];
         files.forEach((fileName) => {
-            conversionPs.push(convertToIsometric(path.join(input, fileName), path.join(output, fileName)));
+            conversionPs.push(
+                convertToIsometric(
+                    path.join(input, fileName),
+                    path.join(output, fileName),
+                ),
+            );
         });
         await Promise.allSettled(conversionPs);
     } else {
-        throw new Error("Invalid Input: Input path was not a file or directory.")
+        throw new Error(
+            "Invalid Input: Input path was not a file or directory.",
+        );
     }
 }
 

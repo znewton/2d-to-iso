@@ -1,24 +1,28 @@
 import jsdoc from "eslint-plugin-jsdoc";
+import prettier from "eslint-config-prettier";
+import globals from "globals";
 import js from "@eslint/js";
 
 export default [
     js.configs.recommended,
     {
         plugins: {
-            jsdoc
+            jsdoc,
         },
         linterOptions: {
-            noInlineConfig: true
+            noInlineConfig: true,
         },
         files: ["**/*.js"],
-        ignores: ["node_modules"],
-        env: {
-            "node": true,
-            "es6": true,
-        },
+        ignores: ["node_modules/*"],
         languageOptions: {
-            ecmaVersion: "6",
+            ecmaVersion: "latest",
             sourceType: "module",
+            globals: {
+                ...globals.node,
+            },
+        },
+        rules: {
+            ...prettier.rules,
         },
     },
 ];
