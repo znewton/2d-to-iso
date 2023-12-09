@@ -17,9 +17,9 @@ npm install
 
 ```shell
 # Convert 1 File
-node index.mjs [path/to/image] [path/to/output/image]
+node index.js [path/to/image] [path/to/output/image]
 # Convert all files in a directory
-node index.mjs [path/to/input/dir] [path/to/output/dir]
+node index.js [path/to/input/dir] [path/to/output/dir]
 # Output verbose logs
-node index.mjs [path/to/image] [path/to/output/image] '{"verbose":true}'
+node index.js [path/to/image] [path/to/output/image] '{"verbose":true}'
 ```
