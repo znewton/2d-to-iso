@@ -5,6 +5,24 @@ import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import chalk from "chalk";
 
+const inputArg = process.argv[2];
+const outputArg = process.argv[3];
+const optionsArg = process.argv[4];
+
+/**
+ * @typedef {Object} ConvertToIsometricOptions
+ * @property {boolean} verbose
+ */
+
+/**
+ * @type {ConvertToIsometricOptions}
+ */
+const options = optionsArg ? JSON.parse(optionsArg) : { verbose: false };
+
+const log = options.verbose ? console.log : () => {};
+const warn = options.verbose ? console.warn : () => {};
+const error = options.verbose ? console.error : () => {};
+
 const execP = promisify(exec);
 /**
  * Run a command and output stdout and in
@@ -56,24 +74,20 @@ async function getImageDimensions(imgPath) {
 }
 
 /**
- * Run the application.
+ * Convert a 2D image to 30deg isometric view.
+ * @param {string|import("node:fs").PathLike} inputPath
+ * @param {string|import("node:fs").PathLike} outputPath
  * @returns {Promise<void>}
  */
-async function main() {
-    const inputImg = path.resolve(process.argv[2]);
-    const outputImg = path.resolve(process.argv[3]);
-
-    if (!(await fs.stat(inputImg)).isFile) {
-        console.error(`${inputImg} does not exist`);
+async function convertToIsometric(inputPath, outputPath) {
+    if (!(await fs.stat(inputPath)).isFile()) {
+        error(`${inputPath} does not exist`);
         throw new Error("Cannot convert image that does not exist");
     }
 
-    console.log(`Converting -
-Input: ${inputImg}
-Output: ${outputImg}
-`);
+    log(`Converting ${inputPath} to isometric at ${outputPath}`);
 
-    const {width,height} = await getImageDimensions(inputImg);
+    const { width, height } = await getImageDimensions(inputPath);
 
     // True Isometric is a 30deg angle <> square
     const shearAngle = 30;
@@ -83,31 +97,67 @@ Output: ${outputImg}
     // So the amount we want to yShear will need to translate to a specific angle relative to Y
     const targetHeight = height + yShear;
 
-    console.log(`Conversion Dimensions -
+    log(`Conversion Dimensions -
 Original Size: ${width}x${height}
 Target Width: ${targetWidth}
 Target Height: ${targetHeight}
 `);
 
-    await fs.copyFile(inputImg, outputImg);
+    await fs.copyFile(inputPath, outputPath);
     await cli(
-        `gm mogrify -geometry ${targetWidth}x${height}! ${outputImg}`
+        `gm mogrify -geometry ${targetWidth}x${height}! ${outputPath}`
     );
     await cli(
         // Trial and Error showed that 35deg is actually what produces a 30deg right triangle below asset.
-        `gm mogrify -shear 0x${shearAngle+5} -background "transparent" ${outputImg}`
+        `gm mogrify -shear 0x${shearAngle+5} -background "transparent" ${outputPath}`
     );
 
-    const {width:final_width,height:final_height} = await getImageDimensions(outputImg);
-    console.log(`Final Identify Result -
+    const {width:final_width,height:final_height} = await getImageDimensions(outputPath);
+    log(`Final Identify Result -
 Dimensions: ${final_width}x${final_height}
 `);
 
     if (withinMargin(final_width, targetWidth, 0.5) && withinMargin(final_height, targetHeight, 0.5)) {
-        console.log(chalk.bold.greenBright("Success!"));
+        console.log(`${chalk.bold.greenBright("Success!")} - ${outputPath}`);
     } else {
-        console.warn(chalk.bold.yellowBright("Warning!"));
-        console.warn("Final dimensions are not within 0.5% of target dimensions.");
+        console.warn(`${chalk.bold.yellowBright("Outside Margin!")} - ${outputPath}`);
+        warn("Final dimensions are not within 0.5% of target dimensions.");
+    }
+}
+
+/**
+ * Run the application.
+ * @returns {Promise<void>}
+ */
+async function main() {
+    const input = path.resolve(inputArg);
+    const output = path.resolve(outputArg);
+
+    const inputStat = await fs.stat(input);
+    if (inputStat.isFile()) {
+        convertToIsometric(input, output);
+    } else if (inputStat.isDirectory()) {
+        const outputStat = await fs.stat(output).catch((error) => {
+            if (error?.code === "ENOENT") return undefined;
+            throw error;
+        })
+        if (outputStat?.isFile()) {
+            throw new Error("Invalid Output: Cannot write to file as directory.")
+        }
+        if (!outputStat?.isDirectory()) {
+            await fs.mkdir(output, { recursive: true });
+        }
+        const files = await fs.readdir(input, { recursive: false });
+        /**
+         * @type {Promise<void>[]}
+         */
+        const conversionPs = [];
+        files.forEach((fileName) => {
+            conversionPs.push(convertToIsometric(path.join(input, fileName), path.join(output, fileName)));
+        });
+        await Promise.allSettled(conversionPs);
+    } else {
+        throw new Error("Invalid Input: Input path was not a file or directory.")
     }
 }
 
