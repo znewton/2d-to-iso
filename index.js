@@ -62,9 +62,11 @@ function withinMargin(value, target, margin) {
  * @returns {Promise<Dimensions>}
  */
 async function getImageDimensions(imgPath) {
+    log(`Identifying ${imgPath}`);
     const identifyResult = await cli(
-        `gm identify -verbose ${imgPath} | grep Geometry`,
+        `gm identify -verbose '${imgPath}' | grep Geometry`,
     );
+    log(`Parsing Identify Result: \n${identifyResult}`);
     const identifyJson = parseYaml(identifyResult);
     const [width, height] = identifyJson.Geometry.split("x");
     return {
@@ -105,13 +107,16 @@ Target Width: ${targetWidth}
 Target Height: ${targetHeight}
 `);
 
+    log(`Copying ${inputPath} to ${outputPath}`);
     await fs.copyFile(inputPath, outputPath);
-    await cli(`gm mogrify -geometry ${targetWidth}x${height}! ${outputPath}`);
+    log(`Resizing ${outputPath} to ${targetWidth}x${height}`);
+    await cli(`gm mogrify -geometry ${targetWidth}x${height}! '${outputPath}'`);
+    log(`Shearing ${outputPath} by ${shearAngle + 5} degrees on Y`);
     await cli(
         // Trial and Error showed that 35deg is actually what produces a 30deg right triangle below asset.
         `gm mogrify -shear 0x${
             shearAngle + 5
-        } -background "transparent" ${outputPath}`,
+        } -background "transparent" '${outputPath}'`,
     );
 
     const { width: final_width, height: final_height } =
@@ -158,19 +163,16 @@ async function main() {
             await fs.mkdir(output, { recursive: true });
         }
         const files = await fs.readdir(input, { recursive: false });
-        /**
-         * @type {Promise<void>[]}
-         */
-        const conversionPs = [];
-        files.forEach((fileName) => {
-            conversionPs.push(
-                convertToIsometric(
+        for (const fileName of files) {
+            try {
+                await convertToIsometric(
                     path.join(input, fileName),
                     path.join(output, fileName),
-                ),
-            );
-        });
-        await Promise.allSettled(conversionPs);
+                );
+            } catch (error) {
+                console.error(error);
+            }
+        }
     } else {
         throw new Error(
             "Invalid Input: Input path was not a file or directory.",
